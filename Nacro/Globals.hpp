@@ -8,6 +8,18 @@ using namespace SDK;
 
 namespace Globals
 {
+	
+	static DWORD FindOffset(std::wstring OffsetToFind){
+	    auto Object = SDK::UObject::FindObject(OffsetToFind, true);
+		//SDK:: just incase sdk is skunked like 1.8
+	    if (Object)
+	     {
+		return *(uint32_t*)(__int64(Object) + 0x44);
+	     }
+
+	    return 0;
+          }
+	
 	bool bIsInLobby;
 	bool bIsInitialized;
 	bool bIsInGame;
