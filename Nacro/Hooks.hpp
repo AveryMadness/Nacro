@@ -100,7 +100,7 @@ namespace Hooks
 		{
 			struct ServerHandlePickupParams
 		{
-			UObject* Pickup;
+			FFortItemEntry* Pickup;
 			float InFlyTime;
 			FVector InStartDirection;
 			bool bPlayPickupSound;
@@ -108,13 +108,13 @@ namespace Hooks
 			
 			auto CurrentParams = (ServerHandlePickupParams*)Params;
 
-		auto ItemInstances = reinterpret_cast<TArray<UObject*>*>(__int64(Globals::FortInventory) + __int64(Offsets::InventoryOffset) + __int64(Offsets::ItemInstancesOffset));
+		auto ItemInstances = Globals::AthenaController->WorldInventory->Inventory->ItemInstances;
 
 		if (CurrentParams->Pickup != nullptr)
 		{
 			// get world item definition from item entry
-			UObject** WorldItemDefinition = reinterpret_cast<UObject**>(__int64(CurrentParams->Pickup) + __int64(Offsets::PrimaryPickupItemEntryOffset) + __int64(Offsets::ItemDefinitionOffset));
-			TArray<QuickbarSlot> QuickbarSlots = *reinterpret_cast<TArray<QuickbarSlot>*>(reinterpret_cast<uintptr_t>(Globals::Quickbar) + Offsets::PrimaryQuickbarOffset + Offsets::SlotsOffset);
+			auto WorldItemDefinition = (UFortWorldItemDefinition*)(CurrentParams->Pickup->ItemDefinition);
+			auto QuickbarSlots = Globals::AthenaController->QuickBars->PrimaryQuickbar->Slots;
 
 			for (int i = 0; i < QuickbarSlots.Num(); i++)
 			{
@@ -123,7 +123,7 @@ namespace Hooks
 					if (i >= 6)
 					{
 						// no space left in inventory, we should replace the current focused quickbar with this new pickup.
-						int* CurrentFocusedSlot = reinterpret_cast<int*>(__int64(Globals::Quickbar) + __int64(Offsets::PrimaryQuickbarOffset) + __int64(Offsets::CurrentFocusedSlotOffset));
+						int CurrentFocusedSlot = Globals::AthenaController->QuickBars->PrimaryQuickbar->CurrentFocusedSlot;
 
 						// do not replace pickaxe
 						if (*CurrentFocusedSlot == 0)
@@ -133,13 +133,13 @@ namespace Hooks
 
 						i = *CurrentFocusedSlot;
 
-						FGuid CurrentFocusedGUID = QuickbarSlots[*CurrentFocusedSlot].Items[0];
+						FGuid CurrentFocusedGUID = QuickbarSlots[CurrentFocusedSlot].Items[0];
 
 						// loop through item entries and see which item matches the current focused slot GUID
 						for (int j = 0; i < ItemInstances->Num(); j++)
 						{
 							auto ItemInstance = ItemInstances->operator[](j);
-
+							auto ItemEntryDefinition = ItemInstance->ItemEntry->
 							auto ItemEntryDefinition = reinterpret_cast<UObject**>(__int64(ItemInstance) + __int64(Offsets::ItemEntryOffset) + __int64(Offsets::ItemDefinitionOffset));
 							auto ItemEntryGuid = reinterpret_cast<FGuid*>(__int64(ItemInstance) + __int64(Offsets::ItemEntryOffset) + __int64(Offsets::ItemGuidOffset));
 
