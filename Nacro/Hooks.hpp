@@ -37,6 +37,8 @@ namespace Hooks
 			Globals::GameplayStatics->STATIC_OpenLevel(Globals::GEngine->GameViewport->World, "Athena_Terrain", true, L"");
 			Globals::bIsInLobby = false;
 		}
+		
+		
 
 		if (FuncName.find("ReadyToStartMatch") != NPOS && !Globals::bIsInitialized && !Globals::bIsInLobby)
 		{
@@ -96,29 +98,73 @@ namespace Hooks
 
 		if (FuncName.find("ServerHandlePickup") != NPOS && Globals::bIsInGame)
 		{
-			auto Params = static_cast<AFortPlayerPawn_ServerHandlePickup_Params*>(Parameters);
+			struct ServerHandlePickupParams
+		{
+			UObject* Pickup;
+			float InFlyTime;
+			FVector InStartDirection;
+			bool bPlayPickupSound;
+		};
+			
+			auto CurrentParams = (ServerHandlePickupParams*)Params;
 
-			if (Params->Pickup->PrimaryPickupItemEntry.ItemDefinition->GetName() == "WID_Harvest_Pickaxe_Athena_C_T01")
-				Player::Equip(Globals::Pickaxe, FGuid{ 0,0,0,0 });
-			else
-				if (Params->Pickup->PrimaryPickupItemEntry.ItemDefinition->IsA(UFortWeaponItemDefinition::StaticClass()))
-				{
-					for (auto it = Globals::ItemsMap.begin(); it != Globals::ItemsMap.end(); ++it)
-					{
-						if (it->first == Params->Pickup->PrimaryPickupItemEntry.ItemDefinition->GetName())
-							Player::Equip(it->second, FGuid{ rand() % 9999, rand() % 9999, rand() % 9999, rand() % 9999 });
-					}
-				}
+		auto ItemInstances = reinterpret_cast<TArray<UObject*>*>(__int64(Globals::FortInventory) + __int64(Offsets::InventoryOffset) + __int64(Offsets::ItemInstancesOffset));
 
-			if (Globals::bInstantReload)
+		if (CurrentParams->Pickup != nullptr)
+		{
+			// get world item definition from item entry
+			UObject** WorldItemDefinition = reinterpret_cast<UObject**>(__int64(CurrentParams->Pickup) + __int64(Offsets::PrimaryPickupItemEntryOffset) + __int64(Offsets::ItemDefinitionOffset));
+			TArray<QuickbarSlot> QuickbarSlots = *reinterpret_cast<TArray<QuickbarSlot>*>(reinterpret_cast<uintptr_t>(Globals::Quickbar) + Offsets::PrimaryQuickbarOffset + Offsets::SlotsOffset);
+
+			for (int i = 0; i < QuickbarSlots.Num(); i++)
 			{
-				Globals::WeaponReloadMontage = Globals::AthenaPawn->CurrentWeapon->WeaponReloadMontage;
-				Globals::ReloadAnimation = Globals::AthenaPawn->CurrentWeapon->ReloadAnimation;
+				if (QuickbarSlots[i].Items.Data == 0)
+				{
+					if (i >= 6)
+					{
+						// no space left in inventory, we should replace the current focused quickbar with this new pickup.
+						int* CurrentFocusedSlot = reinterpret_cast<int*>(__int64(Globals::Quickbar) + __int64(Offsets::PrimaryQuickbarOffset) + __int64(Offsets::CurrentFocusedSlotOffset));
 
-				Globals::AthenaPawn->CurrentWeapon->WeaponReloadMontage = nullptr;
-				Globals::AthenaPawn->CurrentWeapon->ReloadAnimation = nullptr;
+						// do not replace pickaxe
+						if (*CurrentFocusedSlot == 0)
+						{
+							continue;
+						}
+
+						i = *CurrentFocusedSlot;
+
+						FGuid CurrentFocusedGUID = QuickbarSlots[*CurrentFocusedSlot].Items[0];
+
+						// loop through item entries and see which item matches the current focused slot GUID
+						for (int j = 0; i < ItemInstances->Num(); j++)
+						{
+							auto ItemInstance = ItemInstances->operator[](j);
+
+							auto ItemEntryDefinition = reinterpret_cast<UObject**>(__int64(ItemInstance) + __int64(Offsets::ItemEntryOffset) + __int64(Offsets::ItemDefinitionOffset));
+							auto ItemEntryGuid = reinterpret_cast<FGuid*>(__int64(ItemInstance) + __int64(Offsets::ItemEntryOffset) + __int64(Offsets::ItemGuidOffset));
+
+							if (IsMatchingGuid(CurrentFocusedGUID, *ItemEntryGuid))
+							{
+								// spawn the item we are replacing as a pickup
+								SpawnPickupAtLocation(*ItemEntryDefinition, 1, AActor::GetLocation(Globals::Pawn));
+							}
+						}
+
+						// empty current slot
+						Player::EmptySlot(Globals::Quickbar, *CurrentFocusedSlot);
+					}
+
+					// give player item
+					Inventory::AddItemToInventoryWithUpdate(*WorldItemDefinition, EFortQuickBars::Primary, i, 1);
+
+					// destroy pickup in world
+					AActor::Destroy(CurrentParams->Pickup);
+
+					break;
+				}
 			}
 		}
+	}
 
 		if (FuncName.find("ClientOnPawnDied") != NPOS && Globals::bIsInGame)
 		{
